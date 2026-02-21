@@ -106,7 +106,7 @@ async def send_email(to_email: str, subject: str, html: str, text: Optional[str]
         msg,
         hostname=SMTP_HOST,
         port=SMTP_PORT,
-        start_tls=True,
+        use_tls=True,
         username=SMTP_USER,
         password=SMTP_PASS,
         tls_context=tls_context,
