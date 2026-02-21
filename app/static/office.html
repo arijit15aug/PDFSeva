@@ -1,0 +1,417 @@
+<!-- app/static/office.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Office → PDF</title>
+<script src="https://cdn.tailwindcss.com"></script>
+
+<style>
+  .glass{background:rgba(255,255,255,0.10);border:1px solid rgba(255,255,255,0.18);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px)}
+  .shine{
+    background:
+      radial-gradient(700px circle at 15% 10%, rgba(255,255,255,0.35), transparent 55%),
+      radial-gradient(800px circle at 85% 20%, rgba(255,255,255,0.20), transparent 55%);
+  }
+
+  .brandmark{position:relative;width:46px;height:46px;border-radius:18px;background:rgba(0,0,0,0.22);border:1px solid rgba(255,255,255,0.18);overflow:hidden}
+  .brandmark::before{content:"";position:absolute;inset:-2px;background:conic-gradient(from 180deg,rgba(99,102,241,0.95),rgba(168,85,247,0.95),rgba(236,72,153,0.95),rgba(99,102,241,0.95));filter:blur(10px);opacity:0.95}
+  .brandmark::after{content:"";position:absolute;inset:2px;border-radius:16px;background:rgba(0,0,0,0.25);border:1px solid rgba(255,255,255,0.14)}
+  .brandmark>.brandmark-inner{position:relative;z-index:1;height:100%;display:flex;align-items:center;justify-content:center;color:white;text-shadow:0 0 18px rgba(255,255,255,0.45)}
+
+  @keyframes floaty{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+  @keyframes glow{0%,100%{box-shadow:0 0 0 rgba(255,255,255,0)}50%{box-shadow:0 0 32px rgba(255,255,255,.35)}}
+  .floaty{animation:floaty 3s ease-in-out infinite}
+  .glow{animation:glow 3s ease-in-out infinite}
+
+  .checkmark{width:54px;height:54px}
+  .checkmark__circle{stroke:rgba(255,255,255,0.85);stroke-width:2.5;stroke-dasharray:166;stroke-dashoffset:166;animation:stroke 0.6s ease forwards}
+  .checkmark__check{stroke:rgba(255,255,255,0.95);stroke-width:3.5;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:48;stroke-dashoffset:48;animation:stroke 0.35s 0.55s ease forwards}
+  @keyframes stroke{to{stroke-dashoffset:0}}
+
+  @keyframes borderShift{0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%}}
+  .drop-wrap{position:relative;border-radius:28px;padding:2px}
+  .drop-wrap::before{
+    content:"";position:absolute;inset:0;border-radius:28px;padding:2px;
+    background:linear-gradient(120deg,rgba(99,102,241,0.80),rgba(168,85,247,0.80),rgba(236,72,153,0.80));
+    background-size:200% 200%;animation:borderShift 6s ease infinite;
+    -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
+    -webkit-mask-composite:xor;mask-composite:exclude;
+    opacity:.60;pointer-events:none;
+  }
+  .drop-inner{
+    border-radius:26px;padding:36px;background:rgba(0,0,0,0.14);
+    border:1px solid rgba(255,255,255,0.18);
+    backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
+    transition:transform .2s ease, background .2s ease, box-shadow .2s ease;
+  }
+  .drop-wrap:hover .drop-inner{transform:translateY(-1px);box-shadow:0 18px 60px rgba(0,0,0,0.24)}
+  .drop-wrap.dragover::before{opacity:.98}
+  .drop-wrap.dragover .drop-inner{background:rgba(0,0,0,0.18);box-shadow:0 22px 70px rgba(0,0,0,0.30)}
+
+  @keyframes breathe{0%,100%{transform:scale(1);opacity:.55}50%{transform:scale(1.25);opacity:.22}}
+  .breathe{animation:breathe 3s ease-in-out infinite}
+
+  .file-chip{display:inline-flex;align-items:center;gap:10px;padding:10px 14px;border-radius:999px;background:rgba(0,0,0,0.16);border:1px solid rgba(255,255,255,0.18)}
+
+  .key-pill{
+    display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border-radius:999px;
+    font-size:12px;font-weight:900;background:rgba(0,0,0,0.14);
+    border:1px solid rgba(255,255,255,0.16);color:rgba(255,255,255,0.82);
+    transition:transform .15s ease, background .15s ease, border-color .15s ease;
+  }
+  .key-pill .dot{width:8px;height:8px;border-radius:999px;background:rgba(255,255,255,0.35);box-shadow:0 0 14px rgba(255,255,255,0.22)}
+  .key-pill.active{
+    background:rgba(255,255,255,0.16);border-color:rgba(255,255,255,0.30);color:white;
+    transform:translateY(-1px);box-shadow:0 0 30px rgba(255,255,255,0.18)
+  }
+  .key-pill.active .dot{background:rgba(255,255,255,0.90);box-shadow:0 0 18px rgba(255,255,255,0.45)}
+</style>
+</head>
+
+<body class="min-h-screen bg-gradient-to-br from-indigo-600 via-purple-600 to-fuchsia-600">
+  <div class="min-h-screen shine">
+
+    <header class="sticky top-0 z-10">
+      <div class="max-w-4xl mx-auto px-4 py-4">
+        <div class="glass rounded-3xl px-5 py-4 shadow-xl flex items-center justify-between">
+          <div class="flex items-center gap-3">
+            <div class="brandmark">
+              <div class="brandmark-inner">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M7 21h10a2 2 0 002-2V7l-5-5H7a2 2 0 00-2 2v15a2 2 0 002 2z"/>
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M9 9h6M9 13h6M9 17h4"/>
+                </svg>
+              </div>
+            </div>
+            <span class="text-white font-extrabold">PDF Tools</span>
+          </div>
+
+          <a href="/" class="text-white/80 hover:text-white font-semibold text-sm">All tools</a>
+        </div>
+      </div>
+    </header>
+
+    <main class="max-w-4xl mx-auto px-4 py-10">
+      <div class="glass rounded-[2rem] border border-white/20 shadow-2xl p-8 md:p-10">
+
+        <div class="flex items-center justify-between gap-6">
+          <div>
+            <h1 class="text-3xl md:text-4xl font-black tracking-tight text-white">Office → PDF</h1>
+            <p class="mt-2 text-white/70">DOCX • PPTX • XLSX to PDF</p>
+          </div>
+
+          <div class="relative h-14 w-14 flex items-center justify-center floaty">
+            <div class="absolute inset-0 rounded-2xl bg-black/25 border border-white/20"></div>
+            <div class="absolute inset-0 rounded-2xl blur-xl opacity-90"
+                 style="background: radial-gradient(circle at 30% 30%, rgba(255,255,255,0.65), transparent 55%),
+                                    radial-gradient(circle at 70% 30%, rgba(99,102,241,0.85), transparent 58%),
+                                    radial-gradient(circle at 50% 80%, rgba(236,72,153,0.80), transparent 58%);">
+            </div>
+            <div class="relative z-10 h-12 w-12 rounded-2xl bg-white/10 border border-white/15 flex items-center justify-center glow">
+              <span class="text-white text-[11px] font-black tracking-wide">PDF</span>
+            </div>
+          </div>
+        </div>
+
+        <div id="dropWrap" class="drop-wrap mt-8">
+          <label id="dropArea" class="drop-inner block text-center cursor-pointer">
+            <input id="fileInput" type="file" class="hidden"
+                   accept=".doc,.docx,.ppt,.pptx,.xls,.xlsx" />
+
+            <div class="relative flex items-center justify-center">
+              <div class="absolute w-32 h-32 bg-white/20 blur-3xl rounded-full breathe"></div>
+
+              <div class="relative h-14 w-14 rounded-2xl bg-white/10 border border-white/20
+                          flex items-center justify-center shadow-[0_0_28px_rgba(255,255,255,0.30)]">
+                <svg xmlns="http://www.w3.org/2000/svg"
+                     class="w-7 h-7 text-white"
+                     fill="none" viewBox="0 0 24 24"
+                     stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round"
+                        d="M12 16V4m0 0l-4 4m4-4l4 4M4 16v4a2 2 0 002 2h12a2 2 0 002-2v-4"/>
+                </svg>
+              </div>
+            </div>
+
+            <h3 class="mt-5 text-white font-black text-xl">Drop your file here</h3>
+            <p class="mt-1 text-white/70 text-sm">
+              or <span class="text-white font-semibold">click to browse</span>
+            </p>
+
+            <div id="fileMeta" class="hidden mt-6">
+              <div class="file-chip mx-auto">
+                <div class="h-9 w-9 rounded-xl bg-white/10 border border-white/15 flex items-center justify-center">
+                  <span id="fileBadgeText" class="text-white text-[10px] font-black">DOC</span>
+                </div>
+                <div class="text-left">
+                  <div id="fileName" class="text-white font-semibold text-sm leading-4"></div>
+                  <div id="fileSize" class="text-white/70 text-xs"></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="mt-6 flex flex-wrap justify-center gap-2">
+              <span id="keyDOC" class="key-pill"><span class="dot"></span> DOCX</span>
+              <span id="keyPPT" class="key-pill"><span class="dot"></span> PPTX</span>
+              <span id="keyXLS" class="key-pill"><span class="dot"></span> XLSX</span>
+            </div>
+
+            <p class="mt-3 text-white/55 text-xs">
+              Max file size: <span class="text-white/80 font-semibold">25MB</span> (recommended for online).
+            </p>
+          </label>
+        </div>
+
+        <div id="msg" class="hidden mt-6 rounded-2xl px-4 py-3 text-sm font-semibold"></div>
+
+        <div class="mt-6 flex flex-col sm:flex-row gap-3">
+          <button id="convertBtn"
+                  class="w-full sm:flex-1 rounded-2xl bg-white text-purple-700 font-black py-3 px-6 hover:opacity-95 transition shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                  onclick="convertNow()" disabled>
+            Convert to PDF
+          </button>
+
+          <button id="resetBtn"
+                  class="w-full sm:w-40 rounded-2xl border border-white/30 text-white font-black py-3 px-6 hover:bg-white/10 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                  onclick="resetUI()" disabled>
+            Reset
+          </button>
+        </div>
+
+        <div id="progressWrap" class="hidden mt-6">
+          <div class="flex items-center justify-between text-sm">
+            <div class="text-white/80 font-semibold" id="status">Uploading…</div>
+            <div class="text-white/70" id="percent">0%</div>
+          </div>
+          <div class="mt-2 h-2 w-full rounded-full bg-white/15 overflow-hidden">
+            <div id="bar" class="h-2 w-0 bg-white rounded-full transition-all"></div>
+          </div>
+        </div>
+
+        <div class="mt-4 text-xs text-white/70">
+          First conversion can take a few seconds while LibreOffice starts.
+        </div>
+
+      </div>
+    </main>
+
+  </div>
+
+  <div id="successOverlay" class="fixed inset-0 hidden items-center justify-center z-50">
+    <div class="absolute inset-0 bg-black/40"></div>
+    <div class="glass rounded-3xl p-8 w-[320px] text-center relative">
+      <div class="mx-auto w-20 h-20 rounded-full bg-white/15 border border-white/20 flex items-center justify-center glow">
+        <svg class="checkmark" viewBox="0 0 52 52">
+          <circle class="checkmark__circle" cx="26" cy="26" r="25" fill="none"/>
+          <path class="checkmark__check" fill="none" d="M14 27l7 7 17-17"/>
+        </svg>
+      </div>
+      <h3 class="mt-4 text-white font-black text-xl">Done!</h3>
+      <p class="mt-1 text-white/75 text-sm">Your PDF is ready. Downloading…</p>
+    </div>
+  </div>
+
+<script>
+  let selectedFile = null;
+  let activeXhr = null;
+  const MAX_MB = 25;
+  const MAX_BYTES = MAX_MB * 1024 * 1024;
+
+  const fileInput = document.getElementById("fileInput");
+  const dropArea = document.getElementById("dropArea");
+  const dropWrap = document.getElementById("dropWrap");
+  const convertBtn = document.getElementById("convertBtn");
+  const resetBtn = document.getElementById("resetBtn");
+
+  const fileMeta = document.getElementById("fileMeta");
+  const fileNameEl = document.getElementById("fileName");
+  const fileSizeEl = document.getElementById("fileSize");
+  const fileBadgeText = document.getElementById("fileBadgeText");
+
+  const progressWrap = document.getElementById("progressWrap");
+  const statusEl = document.getElementById("status");
+  const percentEl = document.getElementById("percent");
+  const barEl = document.getElementById("bar");
+
+  const msg = document.getElementById("msg");
+
+  const keyDOC = document.getElementById("keyDOC");
+  const keyPPT = document.getElementById("keyPPT");
+  const keyXLS = document.getElementById("keyXLS");
+
+  function showMsg(text, ok){
+    msg.className = "mt-6 rounded-2xl px-4 py-3 text-sm font-semibold " +
+      (ok
+        ? "bg-emerald-400/20 text-emerald-50 border border-emerald-300/20"
+        : "bg-red-400/20 text-red-50 border border-red-300/20");
+    msg.textContent = text;
+    msg.classList.remove("hidden");
+  }
+  function hideMsg(){ msg.classList.add("hidden"); }
+
+  function prettySize(bytes) {
+    const units = ["B","KB","MB","GB"];
+    let i = 0, v = bytes;
+    while (v >= 1024 && i < units.length - 1) { v /= 1024; i++; }
+    return `${v.toFixed(v >= 10 || i === 0 ? 0 : 1)} ${units[i]}`;
+  }
+
+  function resetKeys(){
+    [keyDOC, keyPPT, keyXLS].forEach(el => el.classList.remove("active"));
+  }
+
+  function highlightKey(ext){
+    resetKeys();
+    if (ext === ".ppt" || ext === ".pptx") keyPPT.classList.add("active");
+    else if (ext === ".xls" || ext === ".xlsx") keyXLS.classList.add("active");
+    else keyDOC.classList.add("active");
+  }
+
+  function setBadgeFor(ext){
+    if (ext === ".ppt" || ext === ".pptx") fileBadgeText.textContent = "PPT";
+    else if (ext === ".xls" || ext === ".xlsx") fileBadgeText.textContent = "XLS";
+    else fileBadgeText.textContent = "DOC";
+  }
+
+  function setFile(file) {
+    hideMsg();
+    selectedFile = file;
+    if (!file) return;
+
+    if (file.size > MAX_BYTES){
+      selectedFile = null;
+      showMsg(`File too large. Please upload under ${MAX_MB}MB.`, false);
+      return;
+    }
+
+    const ext = "." + (file.name.split(".").pop() || "");
+    const lower = ext.toLowerCase();
+
+    setBadgeFor(lower);
+    highlightKey(lower);
+
+    fileMeta.classList.remove("hidden");
+    fileNameEl.textContent = file.name;
+    fileSizeEl.textContent = prettySize(file.size);
+
+    convertBtn.disabled = false;
+    resetBtn.disabled = false;
+  }
+
+  fileInput.addEventListener("change", () => setFile(fileInput.files[0]));
+
+  dropArea.ondragover = (e) => { e.preventDefault(); dropWrap.classList.add("dragover"); };
+  dropArea.ondragleave = () => dropWrap.classList.remove("dragover");
+  dropArea.ondrop = (e) => {
+    e.preventDefault();
+    dropWrap.classList.remove("dragover");
+    setFile(e.dataTransfer.files[0]);
+  };
+
+  function resetUI() {
+    hideMsg();
+    if (activeXhr) { activeXhr.abort(); activeXhr = null; }
+
+    selectedFile = null;
+    fileInput.value = "";
+    fileMeta.classList.add("hidden");
+
+    convertBtn.disabled = true;
+    resetBtn.disabled = true;
+
+    progressWrap.classList.add("hidden");
+    barEl.style.width = "0%";
+    percentEl.textContent = "0%";
+    statusEl.textContent = "Uploading…";
+    dropWrap.classList.remove("dragover");
+
+    resetKeys();
+  }
+
+  function showSuccessOverlay(){
+    const overlay = document.getElementById("successOverlay");
+    overlay.classList.remove("hidden");
+    overlay.classList.add("flex");
+    return overlay;
+  }
+  function hideSuccessOverlay(overlay){
+    overlay.classList.add("hidden");
+    overlay.classList.remove("flex");
+  }
+
+  function convertNow() {
+    hideMsg();
+    if (!selectedFile) return;
+
+    convertBtn.disabled = true;
+
+    progressWrap.classList.remove("hidden");
+    statusEl.textContent = "Uploading…";
+    percentEl.textContent = "0%";
+    barEl.style.width = "0%";
+
+    const formData = new FormData();
+    formData.append("file", selectedFile);
+
+    const xhr = new XMLHttpRequest();
+    activeXhr = xhr;
+    xhr.open("POST", "/convert/office-to-pdf", true);
+    xhr.responseType = "blob";
+
+    xhr.upload.onprogress = (e) => {
+      if (!e.lengthComputable) return;
+      const pct = Math.round((e.loaded / e.total) * 100);
+      percentEl.textContent = pct + "%";
+      barEl.style.width = pct + "%";
+      statusEl.textContent = pct < 100 ? "Uploading…" : "Converting…";
+    };
+
+    xhr.onerror = () => {
+      activeXhr = null;
+      showMsg("Network error", false);
+      convertBtn.disabled = false;
+    };
+
+    xhr.onabort = () => {
+      activeXhr = null;
+      showMsg("Cancelled", false);
+      convertBtn.disabled = false;
+    };
+
+    xhr.onload = () => {
+      activeXhr = null;
+
+      if (xhr.status >= 200 && xhr.status < 300) {
+        const overlay = showSuccessOverlay();
+
+        const blob = xhr.response;
+        const url = URL.createObjectURL(blob);
+        const original = selectedFile.name.replace(/\.[^/.]+$/, "");
+
+        setTimeout(() => {
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = `${original}.pdf`;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          URL.revokeObjectURL(url);
+
+          setTimeout(() => hideSuccessOverlay(overlay), 900);
+        }, 650);
+
+      } else {
+        // Try to read error text from server
+        showMsg("Conversion failed. Please try a smaller file or different format.", false);
+        convertBtn.disabled = false;
+      }
+    };
+
+    xhr.send(formData);
+  }
+</script>
+
+</body>
+</html>

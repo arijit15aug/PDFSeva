@@ -1,0 +1,567 @@
+<!-- app/static/jpg.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>JPG → PDF</title>
+<script src="https://cdn.tailwindcss.com"></script>
+
+<style>
+  .glass{
+    background: rgba(255,255,255,0.10);
+    border: 1px solid rgba(255,255,255,0.18);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+  }
+  .shine{
+    background:
+      radial-gradient(700px circle at 15% 10%, rgba(255,255,255,0.35), transparent 55%),
+      radial-gradient(800px circle at 85% 20%, rgba(255,255,255,0.20), transparent 55%);
+  }
+
+  /* brandmark */
+  .brandmark{
+    position: relative;
+    width: 46px;
+    height: 46px;
+    border-radius: 18px;
+    background: rgba(0,0,0,0.22);
+    border: 1px solid rgba(255,255,255,0.18);
+    overflow: hidden;
+  }
+  .brandmark::before{
+    content:"";
+    position:absolute;
+    inset:-2px;
+    background: conic-gradient(
+      from 180deg,
+      rgba(99,102,241,0.95),
+      rgba(168,85,247,0.95),
+      rgba(236,72,153,0.95),
+      rgba(99,102,241,0.95)
+    );
+    filter: blur(10px);
+    opacity: 0.95;
+  }
+  .brandmark::after{
+    content:"";
+    position:absolute;
+    inset:2px;
+    border-radius: 16px;
+    background: rgba(0,0,0,0.25);
+    border: 1px solid rgba(255,255,255,0.14);
+  }
+  .brandmark > .brandmark-inner{
+    position: relative;
+    z-index: 1;
+    height: 100%;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    color:white;
+    text-shadow: 0 0 18px rgba(255,255,255,0.45);
+  }
+
+  /* dropzone border */
+  @keyframes borderShift {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+  }
+  .drop-wrap{
+    position: relative;
+    border-radius: 28px;
+    padding: 2px;
+  }
+  .drop-wrap::before{
+    content:"";
+    position:absolute;
+    inset:0;
+    border-radius:28px;
+    padding:2px;
+    background: linear-gradient(120deg,
+      rgba(34,211,238,0.80),
+      rgba(168,85,247,0.80),
+      rgba(236,72,153,0.80)
+    );
+    background-size: 200% 200%;
+    animation: borderShift 6s ease infinite;
+
+    -webkit-mask:
+      linear-gradient(#000 0 0) content-box,
+      linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+            mask-composite: exclude;
+
+    opacity:.60;
+    pointer-events:none;
+  }
+  .drop-inner{
+    border-radius: 26px;
+    padding: 36px;
+    background: rgba(0,0,0,0.14);
+    border: 1px solid rgba(255,255,255,0.18);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    transition: transform .2s ease, background .2s ease, box-shadow .2s ease;
+  }
+  .drop-wrap:hover .drop-inner{
+    transform: translateY(-1px);
+    box-shadow: 0 18px 60px rgba(0,0,0,0.24);
+  }
+  .drop-wrap.dragover::before{opacity:.98;}
+  .drop-wrap.dragover .drop-inner{
+    background: rgba(0,0,0,0.18);
+    box-shadow: 0 22px 70px rgba(0,0,0,0.30);
+  }
+
+  @keyframes breathe{
+    0%,100%{transform:scale(1);opacity:.55}
+    50%{transform:scale(1.25);opacity:.22}
+  }
+  .breathe{animation:breathe 3s ease-in-out infinite}
+
+  /* success check */
+  .checkmark{width:54px;height:54px}
+  .checkmark__circle{
+    stroke: rgba(255,255,255,0.85);
+    stroke-width: 2.5;
+    stroke-dasharray: 166;
+    stroke-dashoffset: 166;
+    animation: stroke 0.6s ease forwards;
+  }
+  .checkmark__check{
+    stroke: rgba(255,255,255,0.95);
+    stroke-width: 3.5;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-dasharray: 48;
+    stroke-dashoffset: 48;
+    animation: stroke 0.35s 0.55s ease forwards;
+  }
+  @keyframes stroke{to{stroke-dashoffset:0}}
+
+  .chip{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+    padding:10px 14px;
+    border-radius: 16px;
+    background: rgba(0,0,0,0.16);
+    border: 1px solid rgba(255,255,255,0.18);
+  }
+</style>
+</head>
+
+<body class="min-h-screen bg-gradient-to-br from-indigo-600 via-purple-600 to-fuchsia-600">
+  <div class="min-h-screen shine">
+
+    <header class="sticky top-0 z-10">
+      <div class="max-w-4xl mx-auto px-4 py-4">
+        <div class="glass rounded-3xl px-5 py-4 shadow-xl flex items-center justify-between">
+          <div class="flex items-center gap-3">
+            <div class="brandmark">
+              <div class="brandmark-inner">
+                <!-- image icon -->
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M3 7a2 2 0 012-2h14a2 2 0 012 2v10a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"/>
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M8 11a2 2 0 100-4 2 2 0 000 4z"/>
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M21 15l-5-5L5 21"/>
+                </svg>
+              </div>
+            </div>
+            <span class="text-white font-extrabold">JPG → PDF</span>
+          </div>
+          <a href="/" class="text-white/80 hover:text-white font-semibold text-sm">All tools</a>
+        </div>
+      </div>
+    </header>
+
+    <main class="max-w-4xl mx-auto px-4 py-10">
+      <div class="glass rounded-[2rem] border border-white/20 shadow-2xl p-8 md:p-10">
+
+        <div class="flex items-center justify-between gap-6">
+          <div>
+            <h1 class="text-3xl md:text-4xl font-black tracking-tight text-white">JPG → PDF</h1>
+            <p class="mt-2 text-white/70">Upload one or multiple images and get one PDF.</p>
+          </div>
+          <div class="hidden sm:block text-xs text-white/70 text-right">
+            Supports: JPG, JPEG, PNG, WEBP<br>
+            Max total: <span class="text-white font-bold">25MB</span>
+          </div>
+        </div>
+
+        <div id="dropWrap" class="drop-wrap mt-8">
+          <label id="dropArea" class="drop-inner block text-center cursor-pointer">
+            <input id="fileInput" type="file" class="hidden" accept=".jpg,.jpeg,.png,.webp" multiple />
+
+            <div class="relative flex items-center justify-center">
+              <div class="absolute w-32 h-32 bg-white/20 blur-3xl rounded-full breathe"></div>
+              <div class="relative h-14 w-14 rounded-2xl bg-white/10 border border-white/20
+                          flex items-center justify-center shadow-[0_0_28px_rgba(255,255,255,0.30)]">
+                <!-- upload icon -->
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-7 h-7 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M12 16V4m0 0l-4 4m4-4l4 4M4 16v4a2 2 0 002 2h12a2 2 0 002-2v-4"/>
+                </svg>
+              </div>
+            </div>
+
+            <h3 class="mt-5 text-white font-black text-xl">Drop images here</h3>
+            <p class="mt-1 text-white/70 text-sm">or <span class="text-white font-semibold">click to browse</span></p>
+
+            <div class="mt-6 text-left max-w-xl mx-auto">
+              <div class="flex items-center justify-between">
+                <div class="text-white/80 text-sm font-semibold">Selected files</div>
+                <div id="totalLine" class="text-white/70 text-xs font-semibold">Total: 0 B</div>
+              </div>
+              <div id="list" class="mt-3 grid gap-2"></div>
+              <div id="empty" class="mt-3 text-white/60 text-sm">No files selected yet.</div>
+            </div>
+
+            <p class="mt-6 text-white/55 text-xs">
+              Order is the same as you select.
+            </p>
+          </label>
+        </div>
+
+        <!-- MESSAGE BOX -->
+        <div id="msg" class="hidden mt-4 rounded-2xl px-4 py-3 text-sm font-semibold"></div>
+
+        <div class="mt-6 flex flex-col sm:flex-row gap-3">
+          <button id="convertBtn"
+                  class="w-full sm:flex-1 rounded-2xl bg-white text-purple-700 font-black py-3 px-6 hover:opacity-95 transition shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                  onclick="convertNow()" disabled>
+            Convert to PDF
+          </button>
+
+          <button id="resetBtn"
+                  class="w-full sm:w-40 rounded-2xl border border-white/30 text-white font-black py-3 px-6 hover:bg-white/10 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                  onclick="resetUI()" disabled>
+            Reset
+          </button>
+        </div>
+
+        <div id="progressWrap" class="hidden mt-6">
+          <div class="flex items-center justify-between text-sm">
+            <div class="text-white/80 font-semibold" id="status">Uploading…</div>
+            <div class="text-white/70" id="percent">0%</div>
+          </div>
+          <div class="mt-2 h-2 w-full rounded-full bg-white/15 overflow-hidden">
+            <div id="bar" class="h-2 w-0 bg-white rounded-full transition-all"></div>
+          </div>
+        </div>
+
+      </div>
+    </main>
+  </div>
+
+  <!-- Success Overlay -->
+  <div id="successOverlay" class="fixed inset-0 hidden items-center justify-center z-50">
+    <div class="absolute inset-0 bg-black/40"></div>
+    <div class="glass rounded-3xl p-8 w-[320px] text-center relative">
+      <div class="mx-auto w-20 h-20 rounded-full bg-white/15 border border-white/20 flex items-center justify-center">
+        <svg class="checkmark" viewBox="0 0 52 52">
+          <circle class="checkmark__circle" cx="26" cy="26" r="25" fill="none"/>
+          <path class="checkmark__check" fill="none" d="M14 27l7 7 17-17"/>
+        </svg>
+      </div>
+      <h3 class="mt-4 text-white font-black text-xl">Done!</h3>
+      <p class="mt-1 text-white/75 text-sm">Your PDF is ready. Downloading…</p>
+    </div>
+  </div>
+
+<script>
+  let selectedFiles = [];
+  let activeXhr = null;
+
+  // Railway-safe recommended limit
+  const MAX_MB = 25;
+  const MAX_BYTES = MAX_MB * 1024 * 1024;
+
+  const fileInput = document.getElementById("fileInput");
+  const dropArea = document.getElementById("dropArea");
+  const dropWrap = document.getElementById("dropWrap");
+
+  const convertBtn = document.getElementById("convertBtn");
+  const resetBtn = document.getElementById("resetBtn");
+
+  const list = document.getElementById("list");
+  const empty = document.getElementById("empty");
+  const totalLine = document.getElementById("totalLine");
+
+  const progressWrap = document.getElementById("progressWrap");
+  const statusEl = document.getElementById("status");
+  const percentEl = document.getElementById("percent");
+  const barEl = document.getElementById("bar");
+
+  const msg = document.getElementById("msg");
+
+  function showMsg(text, ok){
+    msg.className = "mt-4 rounded-2xl px-4 py-3 text-sm font-semibold " +
+      (ok
+        ? "bg-emerald-400/20 text-emerald-50 border border-emerald-300/20"
+        : "bg-red-400/20 text-red-50 border border-red-300/20");
+    msg.textContent = text;
+    msg.classList.remove("hidden");
+  }
+  function hideMsg(){
+    msg.classList.add("hidden");
+    msg.textContent = "";
+  }
+
+  function prettySize(bytes) {
+    const units = ["B","KB","MB","GB"];
+    let i = 0, v = bytes;
+    while (v >= 1024 && i < units.length - 1) { v /= 1024; i++; }
+    return `${v.toFixed(v >= 10 || i === 0 ? 0 : 1)} ${units[i]}`;
+  }
+
+  function isAllowedImage(name){
+    const ext = (name.split(".").pop() || "").toLowerCase();
+    return ["jpg","jpeg","png","webp"].includes(ext);
+  }
+
+  function totalBytes(){
+    return selectedFiles.reduce((sum, f) => sum + (f?.size || 0), 0);
+  }
+
+  function setButtons(){
+    const ok = selectedFiles.length > 0;
+    convertBtn.disabled = !ok;
+    resetBtn.disabled = !ok;
+  }
+
+  function renderList(){
+    list.innerHTML = "";
+
+    const total = totalBytes();
+    totalLine.textContent = "Total: " + prettySize(total);
+
+    if (!selectedFiles.length) {
+      empty.classList.remove("hidden");
+      setButtons();
+      return;
+    }
+
+    empty.classList.add("hidden");
+    setButtons();
+
+    selectedFiles.forEach((f, idx) => {
+      const row = document.createElement("div");
+      row.className = "chip";
+      row.innerHTML = `
+        <div class="min-w-0">
+          <div class="text-white font-semibold text-sm truncate">${idx+1}. ${f.name}</div>
+          <div class="text-white/70 text-xs">${prettySize(f.size)}</div>
+        </div>
+        <button class="text-white/70 hover:text-white text-xs font-black"
+                data-idx="${idx}">Remove</button>
+      `;
+      row.querySelector("button").onclick = (e) => {
+        const i = Number(e.currentTarget.dataset.idx);
+        selectedFiles.splice(i, 1);
+        hideMsg();
+        renderList();
+      };
+      list.appendChild(row);
+    });
+  }
+
+  function addFiles(files){
+    hideMsg();
+    const arr = Array.from(files || []);
+    if (!arr.length) return;
+
+    const onlyAllowed = arr.filter(f => isAllowedImage(f.name));
+    if (onlyAllowed.length !== arr.length){
+      showMsg("Some files were ignored (only JPG/JPEG/PNG/WEBP allowed).", false);
+    }
+
+    // append in selection order
+    selectedFiles = selectedFiles.concat(onlyAllowed);
+
+    // enforce total limit
+    const total = totalBytes();
+    if (total > MAX_BYTES){
+      // remove last batch until ok
+      while (selectedFiles.length && totalBytes() > MAX_BYTES){
+        selectedFiles.pop();
+      }
+      showMsg(`Total size too large. Max ${MAX_MB}MB. Some files were removed.`, false);
+    }
+
+    renderList();
+  }
+
+  fileInput.addEventListener("change", () => addFiles(fileInput.files));
+
+  dropArea.ondragover = (e) => { e.preventDefault(); dropWrap.classList.add("dragover"); };
+  dropArea.ondragleave = () => dropWrap.classList.remove("dragover");
+  dropArea.ondrop = (e) => {
+    e.preventDefault();
+    dropWrap.classList.remove("dragover");
+    addFiles(e.dataTransfer.files);
+  };
+
+  function resetUI(){
+    hideMsg();
+    if (activeXhr) { activeXhr.abort(); activeXhr = null; }
+    selectedFiles = [];
+    fileInput.value = "";
+    renderList();
+    progressWrap.classList.add("hidden");
+    barEl.style.width = "0%";
+    percentEl.textContent = "0%";
+    statusEl.textContent = "Uploading…";
+    dropWrap.classList.remove("dragover");
+    convertBtn.textContent = "Convert to PDF";
+  }
+
+  function showSuccessOverlay(){
+    const overlay = document.getElementById("successOverlay");
+    overlay.classList.remove("hidden");
+    overlay.classList.add("flex");
+    return overlay;
+  }
+  function hideSuccessOverlay(overlay){
+    overlay.classList.add("hidden");
+    overlay.classList.remove("flex");
+  }
+
+  function getFilenameFromDisposition(disposition){
+    if(!disposition) return null;
+    const m = disposition.match(/filename\*=UTF-8''([^;]+)|filename="([^"]+)"/i);
+    try{
+      const raw = decodeURIComponent(m?.[1] || m?.[2] || "");
+      return raw || null;
+    }catch{
+      return m?.[2] || null;
+    }
+  }
+
+  async function readErrorBlob(blob){
+    try{
+      const text = await blob.text();
+      try{
+        const j = JSON.parse(text);
+        if(j && typeof j.detail === "string") return j.detail;
+      }catch(_){}
+      return text || "Request failed";
+    }catch(_){
+      return "Request failed";
+    }
+  }
+
+  function convertNow(){
+    if (!selectedFiles.length) return;
+
+    const total = totalBytes();
+    if (total > MAX_BYTES){
+      showMsg(`Total size too large. Max ${MAX_MB}MB.`, false);
+      return;
+    }
+
+    hideMsg();
+    convertBtn.disabled = true;
+    resetBtn.disabled = true;
+    convertBtn.textContent = "Converting…";
+
+    progressWrap.classList.remove("hidden");
+    statusEl.textContent = "Uploading…";
+    percentEl.textContent = "0%";
+    barEl.style.width = "0%";
+
+    const formData = new FormData();
+    // backend expects field name "files"
+    selectedFiles.forEach(f => formData.append("files", f));
+
+    const xhr = new XMLHttpRequest();
+    activeXhr = xhr;
+    xhr.open("POST", "/convert/jpg-to-pdf", true);
+    xhr.responseType = "blob";
+
+    xhr.upload.onprogress = (e) => {
+      if (!e.lengthComputable) return;
+      const pct = Math.round((e.loaded / e.total) * 100);
+      percentEl.textContent = pct + "%";
+      barEl.style.width = pct + "%";
+      statusEl.textContent = pct < 100 ? "Uploading…" : "Converting…";
+    };
+
+    xhr.upload.onload = () => {
+      statusEl.textContent = "Converting…";
+      percentEl.textContent = "100%";
+      barEl.style.width = "100%";
+    };
+
+    xhr.onerror = () => {
+      activeXhr = null;
+      showMsg("Network error", false);
+      statusEl.textContent = "❌ Network error";
+      convertBtn.disabled = false;
+      resetBtn.disabled = false;
+      convertBtn.textContent = "Convert to PDF";
+    };
+
+    xhr.onabort = () => {
+      activeXhr = null;
+      showMsg("Cancelled", false);
+      statusEl.textContent = "Cancelled";
+      convertBtn.disabled = false;
+      resetBtn.disabled = false;
+      convertBtn.textContent = "Convert to PDF";
+    };
+
+    xhr.onload = async () => {
+      activeXhr = null;
+
+      if (xhr.status >= 200 && xhr.status < 300) {
+        const overlay = showSuccessOverlay();
+
+        const blob = xhr.response;
+        const url = URL.createObjectURL(blob);
+
+        // prefer backend filename if present
+        const disp = xhr.getResponseHeader("Content-Disposition");
+        const fnameFromServer = getFilenameFromDisposition(disp);
+
+        const base = selectedFiles[0].name.replace(/\.[^/.]+$/, "");
+        const fname = fnameFromServer || `${base}.pdf`;
+
+        setTimeout(() => {
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = fname;
+
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          URL.revokeObjectURL(url);
+
+          showMsg("PDF created. Download started.", true);
+          statusEl.textContent = "Done ✅";
+
+          setTimeout(() => hideSuccessOverlay(overlay), 900);
+        }, 700);
+
+      } else {
+        const err = await readErrorBlob(xhr.response);
+        showMsg("Conversion failed: " + err, false);
+        statusEl.textContent = "❌ Conversion failed";
+      }
+
+      convertBtn.disabled = false;
+      resetBtn.disabled = false;
+      convertBtn.textContent = "Convert to PDF";
+    };
+
+    xhr.send(formData);
+  }
+
+  // initial state
+  renderList();
+</script>
+</body>
+</html>

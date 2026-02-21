@@ -1,0 +1,79 @@
+import os
+import uuid
+import shutil
+import subprocess
+from pathlib import Path
+
+from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi.responses import FileResponse
+
+UPLOAD_DIR = Path("uploads")
+OUTPUT_DIR = Path("outputs")
+
+UPLOAD_DIR.mkdir(exist_ok=True)
+OUTPUT_DIR.mkdir(exist_ok=True)
+
+app = FastAPI(title="Office → PDF Converter (Mac + LibreOffice)")
+
+ALLOWED_EXT = {".doc", ".docx", ".ppt", ".pptx", ".xls", ".xlsx"}
+
+def convert_office_to_pdf(input_path: Path, out_dir: Path) -> Path:
+    """
+    Converts Office files to PDF using LibreOffice (soffice).
+    """
+    cmd = [
+        "soffice",
+        "--headless",
+        "--nologo",
+        "--nolockcheck",
+        "--nodefault",
+        "--nofirststartwizard",
+        "--convert-to", "pdf",
+        "--outdir", str(out_dir),
+        str(input_path),
+    ]
+
+    p = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    if p.returncode != 0:
+        raise RuntimeError(p.stderr or p.stdout or "LibreOffice conversion failed")
+
+    # Expected output: same base name with .pdf
+    expected = out_dir / (input_path.stem + ".pdf")
+    if expected.exists():
+        return expected
+
+    # Fallback: pick newest PDF if name changed
+    pdfs = sorted(out_dir.glob("*.pdf"), key=lambda x: x.stat().st_mtime, reverse=True)
+    if not pdfs:
+        raise RuntimeError("No PDF produced")
+    return pdfs[0]
+
+@app.post("/convert/office-to-pdf")
+async def office_to_pdf(file: UploadFile = File(...)):
+    ext = Path(file.filename).suffix.lower()
+    if ext not in ALLOWED_EXT:
+        raise HTTPException(400, f"Unsupported file type: {ext}. Allowed: {sorted(ALLOWED_EXT)}")
+
+    job_id = str(uuid.uuid4())
+
+    # Save upload
+    in_path = UPLOAD_DIR / f"{job_id}{ext}"
+    with in_path.open("wb") as f:
+        shutil.copyfileobj(file.file, f)
+
+    # Convert
+    job_out_dir = OUTPUT_DIR / job_id
+    job_out_dir.mkdir(parents=True, exist_ok=True)
+
+    try:
+        pdf_path = convert_office_to_pdf(in_path, job_out_dir)
+    except Exception as e:
+        raise HTTPException(500, f"Conversion failed: {e}")
+
+    # Return file directly
+    return FileResponse(
+        path=str(pdf_path),
+        media_type="application/pdf",
+        filename=pdf_path.name,
+    )
+

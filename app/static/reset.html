@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Reset password</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .glass{background:rgba(255,255,255,.10);border:1px solid rgba(255,255,255,.18);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px)}
+    .shine{background:radial-gradient(600px circle at 20% 10%, rgba(255,255,255,.35), transparent 55%),radial-gradient(700px circle at 80% 20%, rgba(255,255,255,.22), transparent 55%),radial-gradient(700px circle at 50% 80%, rgba(255,255,255,.18), transparent 55%)}
+    .btn{transition:.15s}.btn:active{transform:translateY(1px)}
+  </style>
+</head>
+
+<body class="min-h-screen bg-gradient-to-br from-indigo-600 via-purple-600 to-fuchsia-600">
+<div class="min-h-screen shine">
+  <div class="max-w-lg mx-auto px-4 py-10">
+    <div class="glass rounded-3xl p-6 md:p-8 shadow-2xl">
+      <div class="flex items-center justify-between">
+        <h1 class="text-2xl md:text-3xl font-black text-white">Reset password</h1>
+        <a href="/auth/login" class="text-white/80 hover:text-white text-sm font-semibold">Back</a>
+      </div>
+      <p class="text-white/70 mt-2">Enter a new password.</p>
+
+      <div id="msg" class="hidden mt-4 rounded-2xl px-4 py-3 text-sm font-semibold"></div>
+
+      <form id="form" class="mt-6 space-y-3">
+        <input id="token" name="token" type="hidden" />
+
+        <div>
+          <label class="text-white/80 text-sm font-semibold">New password</label>
+          <input name="password" type="password" required minlength="6" autocomplete="new-password"
+                 class="mt-1 w-full rounded-2xl bg-white/10 border border-white/20 text-white placeholder:text-white/40 px-4 py-3 outline-none focus:border-white/40"
+                 placeholder="Minimum 6 characters">
+        </div>
+
+        <button id="btn" type="submit"
+                class="btn w-full rounded-2xl bg-white text-slate-900 font-extrabold px-4 py-3 shadow-lg hover:opacity-95">
+          Update password
+        </button>
+
+        <div class="text-center text-white/80 text-sm">
+          Go to
+          <a class="underline font-semibold hover:text-white" href="/auth/login">Sign in</a>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const params = new URLSearchParams(location.search);
+  const token = params.get("token");
+
+  const tokenInput = document.getElementById("token");
+  const f = document.getElementById("form");
+  const b = document.getElementById("btn");
+  const m = document.getElementById("msg");
+
+  const show = (t, ok) => {
+    m.className = "mt-4 rounded-2xl px-4 py-3 text-sm font-semibold " +
+      (ok
+        ? "bg-emerald-400/20 text-emerald-50 border border-emerald-300/20"
+        : "bg-red-400/20 text-red-50 border border-red-300/20");
+    m.textContent = t;
+    m.classList.remove("hidden");
+  };
+
+  if(!token){
+    show("Reset token missing. Please use the link from your email.", false);
+  }else{
+    tokenInput.value = token;
+  }
+
+  f.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    b.disabled = true;
+    b.textContent = "Updating…";
+
+    try{
+      const fd = new FormData(f);
+      const r = await fetch("/auth/reset", { method:"POST", body: fd });
+
+      if(!r.ok){
+        let msg = "Reset failed";
+        try{ const j = await r.json(); msg = j.detail || msg; }catch(_){}
+        show(msg, false);
+        return;
+      }
+
+      const data = await r.json();
+      show(data.message || "Password updated. You can sign in now.", true);
+
+      setTimeout(() => location.href = "/auth/login", 900);
+    }catch(err){
+      show("Network error", false);
+    }finally{
+      b.disabled = false;
+      b.textContent = "Update password";
+    }
+  });
+})();
+</script>
+</body>
+</html>

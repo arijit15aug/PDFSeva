@@ -1,0 +1,538 @@
+<!-- app/static/compress.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Compress PDF</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .glass{
+      background:rgba(255,255,255,.10);
+      border:1px solid rgba(255,255,255,.18);
+      backdrop-filter:blur(16px);
+      -webkit-backdrop-filter:blur(16px);
+    }
+    .shine{
+      background:
+        radial-gradient(700px circle at 15% 10%, rgba(255,255,255,.35), transparent 55%),
+        radial-gradient(800px circle at 85% 20%, rgba(255,255,255,.20), transparent 55%);
+    }
+
+    .pill{
+      border:1px solid rgba(255,255,255,.16);
+      background:rgba(255,255,255,.08);
+    }
+
+    /* Modern drop border */
+    @keyframes borderShift{0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%}}
+    .drop-wrap{position:relative;border-radius:22px;padding:2px;}
+    .drop-wrap::before{
+      content:"";position:absolute;inset:0;border-radius:22px;padding:2px;
+      background:linear-gradient(120deg, rgba(34,211,238,.85), rgba(168,85,247,.85), rgba(236,72,153,.85));
+      background-size:200% 200%;
+      animation:borderShift 6s ease infinite;
+      -webkit-mask:linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+      -webkit-mask-composite:xor;mask-composite:exclude;
+      opacity:.55;pointer-events:none;
+      transition:opacity .18s ease;
+    }
+    .drop-inner{
+      border-radius:20px;
+      padding:18px 16px;
+      background:rgba(0,0,0,.14);
+      border:1px solid rgba(255,255,255,.16);
+      transition:transform .18s ease, background .18s ease, box-shadow .18s ease;
+    }
+    .drop-wrap.dragover::before{opacity:.95;}
+    .drop-wrap.dragover .drop-inner{
+      background:rgba(0,0,0,.18);
+      transform:translateY(-1px);
+      box-shadow:0 16px 50px rgba(0,0,0,.25);
+    }
+
+    /* Toggle */
+    .toggle{
+      width:42px;height:24px;border-radius:999px;
+      background:rgba(255,255,255,.18);
+      border:1px solid rgba(255,255,255,.22);
+      position:relative;cursor:pointer;
+      transition:background .18s ease;
+      flex: 0 0 auto;
+    }
+    .toggle::after{
+      content:"";
+      width:18px;height:18px;border-radius:999px;
+      background:white;
+      position:absolute;top:2px;left:2px;
+      transition:transform .18s ease;
+      box-shadow:0 8px 16px rgba(0,0,0,.25);
+    }
+    .toggle.on{background:rgba(16,185,129,.35);}
+    .toggle.on::after{transform:translateX(18px);}
+  </style>
+</head>
+
+<body class="min-h-screen bg-gradient-to-br from-indigo-600 via-purple-600 to-fuchsia-600">
+  <div class="min-h-screen shine">
+
+    <!-- Header -->
+    <header class="max-w-4xl mx-auto px-4 pt-4">
+      <div class="glass rounded-3xl px-4 py-3 flex justify-between items-center shadow-xl">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-2xl bg-black/20 border border-white/15 flex items-center justify-center">
+            <!-- zipper-ish icon -->
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v18" />
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9 6h6M9 10h6M9 14h6M9 18h6" />
+            </svg>
+          </div>
+          <div class="leading-tight">
+            <div class="text-white font-extrabold">Compress PDF</div>
+            <div class="text-white/60 text-[11px]">Choose strength • Download smaller file</div>
+          </div>
+        </div>
+        <a href="/" class="text-white/80 hover:text-white text-sm font-semibold">All tools</a>
+      </div>
+    </header>
+
+    <!-- Main -->
+    <main class="max-w-4xl mx-auto px-4 py-8">
+      <div class="glass rounded-[1.75rem] p-5 sm:p-6 shadow-2xl border border-white/15">
+
+        <!-- Title + Slider Card Row -->
+        <div class="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
+          <div class="min-w-0">
+            <h1 class="text-2xl sm:text-3xl font-black text-white">Compress in one click.</h1>
+            <p class="text-white/70 mt-1 text-sm">Upload a PDF → get a smaller PDF back.</p>
+          </div>
+
+          <!-- Slider Card (PNG-style) -->
+          <div class="glass rounded-2xl border border-white/20 p-4 w-full lg:w-[360px]">
+            <div class="flex items-start justify-between gap-3">
+              <div class="text-white font-extrabold">Compression</div>
+
+              <div class="flex items-center gap-2">
+                <div class="text-right leading-tight">
+                  <div class="text-white text-[11px] font-semibold">Keep quality</div>
+                  <div class="text-white/55 text-[10px]">less aggressive</div>
+                </div>
+                <div id="qualityToggle" class="toggle" role="switch" aria-checked="false" tabindex="0"></div>
+              </div>
+            </div>
+
+            <div class="mt-2 flex items-center justify-between">
+              <div id="strengthLabel" class="text-white font-black text-sm">Balanced</div>
+              <div id="strengthValue" class="text-white/80 text-sm font-bold">50</div>
+            </div>
+
+            <input id="strength" type="range" min="0" max="100" step="1" value="50"
+                   class="w-full mt-2 accent-white">
+
+            <div class="flex justify-between text-[11px] text-white/60 mt-1">
+              <span>Low</span><span>Balanced</span><span>High</span>
+            </div>
+
+            <div id="strengthSub" class="text-[11px] text-white/55 mt-2">
+              Best for most PDFs
+            </div>
+
+            <div class="mt-3 flex flex-wrap gap-2">
+              <span id="presetPill" class="pill text-white/85 text-[11px] font-bold px-2 py-1 rounded-full">preset: ebook</span>
+              <span id="estimatePill" class="pill text-white/85 text-[11px] font-bold px-2 py-1 rounded-full">~ —</span>
+              <span id="savePill" class="pill text-white/85 text-[11px] font-bold px-2 py-1 rounded-full">save —</span>
+              <span class="pill text-white/85 text-[11px] font-bold px-2 py-1 rounded-full">max 25MB</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Dropzone -->
+        <div id="dropWrap" class="drop-wrap mt-5">
+          <label id="dropArea" class="drop-inner block cursor-pointer select-none">
+            <input id="fileInput" type="file" class="hidden" accept=".pdf" />
+            <div class="flex items-center justify-between gap-3">
+              <div class="min-w-0">
+                <div class="text-white font-black text-lg">
+                  Drop PDF <span class="text-white/60 font-semibold">or click to browse</span>
+                </div>
+                <div id="fileLine" class="text-white/70 text-sm mt-1 truncate">No file selected</div>
+              </div>
+              <div class="pill rounded-2xl px-3 py-2 text-white/90 text-xs font-extrabold">
+                PDF
+              </div>
+            </div>
+          </label>
+        </div>
+
+        <!-- MESSAGE BOX -->
+        <div id="msg" class="hidden mt-4 rounded-2xl px-4 py-3 text-sm font-semibold"></div>
+
+        <!-- Buttons -->
+        <div class="flex flex-col sm:flex-row gap-3 mt-4">
+          <button id="compressBtn"
+                  class="bg-white text-purple-700 font-black px-6 py-3 rounded-2xl w-full shadow-lg disabled:opacity-50 disabled:cursor-not-allowed">
+            Compress
+          </button>
+
+          <button id="resetBtn"
+                  class="border border-white/30 text-white font-black px-6 py-3 rounded-2xl sm:w-36 w-full hover:bg-white/10 transition disabled:opacity-50 disabled:cursor-not-allowed">
+            Reset
+          </button>
+        </div>
+
+        <!-- Progress -->
+        <div id="progressWrap" class="hidden mt-4">
+          <div class="flex justify-between text-white text-sm">
+            <span id="status">Uploading…</span>
+            <span id="percent">0%</span>
+          </div>
+          <div class="w-full h-2 bg-white/20 rounded mt-2 overflow-hidden">
+            <div id="bar" class="h-2 bg-white w-0 transition-all"></div>
+          </div>
+        </div>
+
+        <!-- Result -->
+        <div id="resultBox" class="hidden mt-4 glass rounded-2xl p-3 border border-white/20">
+          <div class="text-white font-extrabold text-sm">Result</div>
+          <div class="mt-2 grid grid-cols-1 sm:grid-cols-3 gap-2 text-sm">
+            <div class="pill rounded-xl p-2">
+              <div class="text-white/60 text-[10px] font-semibold">Original</div>
+              <div id="origSize" class="text-white font-black mt-0.5">—</div>
+            </div>
+            <div class="pill rounded-xl p-2">
+              <div class="text-white/60 text-[10px] font-semibold">Compressed</div>
+              <div id="outSize" class="text-white font-black mt-0.5">—</div>
+            </div>
+            <div class="pill rounded-xl p-2">
+              <div class="text-white/60 text-[10px] font-semibold">Saved</div>
+              <div id="savedPct" class="text-white font-black mt-0.5">—</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </main>
+  </div>
+
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+  let selected = null;
+  let activeXhr = null;
+
+  // Railway-safe recommended limit
+  const MAX_MB = 25;
+  const MAX_BYTES = MAX_MB * 1024 * 1024;
+
+  const fileInput = document.getElementById("fileInput");
+  const dropWrap = document.getElementById("dropWrap");
+  const compressBtn = document.getElementById("compressBtn");
+  const resetBtn = document.getElementById("resetBtn");
+  const fileLine = document.getElementById("fileLine");
+
+  const strength = document.getElementById("strength");
+  const strengthLabel = document.getElementById("strengthLabel");
+  const strengthValue = document.getElementById("strengthValue");
+  const strengthSub = document.getElementById("strengthSub");
+
+  const presetPill = document.getElementById("presetPill");
+  const estimatePill = document.getElementById("estimatePill");
+  const savePill = document.getElementById("savePill");
+
+  const qualityToggle = document.getElementById("qualityToggle");
+  let keepQuality = false;
+
+  const progressWrap = document.getElementById("progressWrap");
+  const statusEl = document.getElementById("status");
+  const percentEl = document.getElementById("percent");
+  const barEl = document.getElementById("bar");
+
+  const resultBox = document.getElementById("resultBox");
+  const origSizeEl = document.getElementById("origSize");
+  const outSizeEl = document.getElementById("outSize");
+  const savedPctEl = document.getElementById("savedPct");
+
+  const msg = document.getElementById("msg");
+
+  function showMsg(text, ok){
+    msg.className = "mt-4 rounded-2xl px-4 py-3 text-sm font-semibold " +
+      (ok
+        ? "bg-emerald-400/20 text-emerald-50 border border-emerald-300/20"
+        : "bg-red-400/20 text-red-50 border border-red-300/20");
+    msg.textContent = text;
+    msg.classList.remove("hidden");
+  }
+  function hideMsg(){
+    msg.classList.add("hidden");
+    msg.textContent = "";
+  }
+
+  function pretty(bytes){
+    const u=["B","KB","MB","GB"];
+    let i=0,v=bytes;
+    while(v>=1024 && i<u.length-1){v/=1024;i++;}
+    return `${v.toFixed(v>=10||i===0?0:1)} ${u[i]}`;
+  }
+
+  function setEnabled(hasFile){
+    compressBtn.disabled = !hasFile;
+    resetBtn.disabled = !hasFile;
+  }
+
+  function presetFromStrength(v){
+    // slider -> preset; keepQuality shifts to less aggressive
+    if (keepQuality){
+      if (v <= 35) return {preset:"prepress", label:"Low (Max quality)", sub:"Best quality, least compression"};
+      if (v <= 75) return {preset:"printer",  label:"Balanced (Quality)", sub:"Great quality, good compression"};
+      if (v <= 95) return {preset:"ebook",    label:"High (Still sharp)", sub:"Smaller file, still good quality"};
+      return {preset:"screen", label:"Max (Smallest)", sub:"Smallest file, quality reduced"};
+    } else {
+      if (v <= 25) return {preset:"prepress", label:"Low (High quality)", sub:"Best quality, least compression"};
+      if (v <= 60) return {preset:"printer",  label:"Balanced+", sub:"Good quality for printing"};
+      if (v <= 85) return {preset:"ebook",    label:"Balanced", sub:"Best for most PDFs"};
+      return {preset:"screen", label:"High (Smallest)", sub:"Smallest file, quality reduced"};
+    }
+  }
+
+  function estimateFactor(preset){
+    // heuristic output ratio (depends on content!)
+    const base = {
+      prepress: 0.92,
+      printer:  0.72,
+      ebook:    0.55,
+      screen:   0.35
+    }[preset] ?? 0.55;
+
+    return keepQuality ? Math.min(0.98, base + 0.12) : base;
+  }
+
+  function updateEstimate(){
+    const v = parseInt(strength.value, 10);
+    strengthValue.textContent = String(v);
+
+    const m = presetFromStrength(v);
+    strengthLabel.textContent = m.label;
+    strengthSub.textContent = m.sub;
+    presetPill.textContent = "preset: " + m.preset;
+
+    if(!selected){
+      estimatePill.textContent = "~ —";
+      savePill.textContent = "save —";
+      return;
+    }
+
+    const factor = estimateFactor(m.preset);
+    const outBytes = Math.max(30_000, Math.round(selected.size * factor));
+    const savePct = Math.max(0, Math.round((1 - outBytes / selected.size) * 100));
+
+    estimatePill.textContent = "~ " + pretty(outBytes);
+    savePill.textContent = "save ~" + savePct + "%";
+  }
+
+  function setFile(f){
+    hideMsg();
+    resultBox.classList.add("hidden");
+    selected = f || null;
+
+    if(!selected){
+      fileLine.textContent = "No file selected";
+      setEnabled(false);
+      updateEstimate();
+      return;
+    }
+
+    const ext = (selected.name.split(".").pop() || "").toLowerCase();
+    if(ext !== "pdf"){
+      selected = null;
+      fileLine.textContent = "No file selected";
+      setEnabled(false);
+      showMsg("Please select a PDF file.", false);
+      updateEstimate();
+      return;
+    }
+
+    if(selected.size > MAX_BYTES){
+      selected = null;
+      fileLine.textContent = "No file selected";
+      setEnabled(false);
+      showMsg(`File too large. Max ${MAX_MB}MB for Railway safety.`, false);
+      updateEstimate();
+      return;
+    }
+
+    fileLine.textContent = `${selected.name} • ${pretty(selected.size)}`;
+    setEnabled(true);
+    updateEstimate();
+  }
+
+  function setToggle(on){
+    keepQuality = !!on;
+    qualityToggle.classList.toggle("on", keepQuality);
+    qualityToggle.setAttribute("aria-checked", keepQuality ? "true" : "false");
+    hideMsg();
+    updateEstimate();
+  }
+
+  qualityToggle.addEventListener("click", () => setToggle(!keepQuality));
+  qualityToggle.addEventListener("keydown", (e) => {
+    if(e.key === "Enter" || e.key === " "){
+      e.preventDefault();
+      setToggle(!keepQuality);
+    }
+  });
+
+  strength.addEventListener("input", updateEstimate);
+  fileInput.addEventListener("change", () => setFile(fileInput.files?.[0]));
+
+  // drag/drop
+  const dropArea = document.getElementById("dropArea");
+  dropArea.addEventListener("dragover", (e) => { e.preventDefault(); dropWrap.classList.add("dragover"); });
+  dropArea.addEventListener("dragleave", () => dropWrap.classList.remove("dragover"));
+  dropArea.addEventListener("drop", (e) => {
+    e.preventDefault();
+    dropWrap.classList.remove("dragover");
+    setFile(e.dataTransfer.files?.[0]);
+  });
+
+  // reset
+  resetBtn.addEventListener("click", () => {
+    hideMsg();
+    if(activeXhr){ activeXhr.abort(); activeXhr = null; }
+    fileInput.value = "";
+    progressWrap.classList.add("hidden");
+    barEl.style.width = "0%";
+    percentEl.textContent = "0%";
+    statusEl.textContent = "Uploading…";
+    compressBtn.textContent = "Compress";
+    resultBox.classList.add("hidden");
+    setFile(null);
+  });
+
+  function getFilenameFromDisposition(disposition){
+    if(!disposition) return null;
+    const m = disposition.match(/filename\*=UTF-8''([^;]+)|filename="([^"]+)"/i);
+    try{
+      const raw = decodeURIComponent(m?.[1] || m?.[2] || "");
+      return raw || null;
+    }catch{
+      return m?.[2] || null;
+    }
+  }
+
+  async function readErrorBlob(blob){
+    try{
+      const text = await blob.text();
+      try{
+        const j = JSON.parse(text);
+        if(j && typeof j.detail === "string") return j.detail;
+      }catch(_){}
+      return text || "Request failed";
+    }catch(_){
+      return "Request failed";
+    }
+  }
+
+  // compress
+  compressBtn.addEventListener("click", () => {
+    if(!selected) return;
+
+    hideMsg();
+    compressBtn.disabled = true;
+    resetBtn.disabled = true;
+    compressBtn.textContent = "Compressing…";
+
+    progressWrap.classList.remove("hidden");
+    statusEl.textContent = "Uploading…";
+    percentEl.textContent = "0%";
+    barEl.style.width = "0%";
+
+    const v = parseInt(strength.value, 10);
+    const {preset} = presetFromStrength(v);
+
+    const fd = new FormData();
+    fd.append("file", selected);
+    fd.append("preset", preset);
+
+    const xhr = new XMLHttpRequest();
+    activeXhr = xhr;
+    xhr.open("POST", "/convert/compress-pdf", true);
+    xhr.responseType = "blob";
+
+    xhr.upload.onprogress = (e) => {
+      if(!e.lengthComputable) return;
+      const pct = Math.round((e.loaded / e.total) * 100);
+      percentEl.textContent = pct + "%";
+      barEl.style.width = pct + "%";
+      statusEl.textContent = pct < 100 ? "Uploading…" : "Compressing…";
+    };
+
+    xhr.onerror = () => {
+      activeXhr = null;
+      showMsg("Network error", false);
+      compressBtn.disabled = false;
+      resetBtn.disabled = false;
+      compressBtn.textContent = "Compress";
+    };
+
+    xhr.onabort = () => {
+      activeXhr = null;
+      showMsg("Cancelled", false);
+      compressBtn.disabled = false;
+      resetBtn.disabled = false;
+      compressBtn.textContent = "Compress";
+    };
+
+    xhr.onload = async () => {
+      activeXhr = null;
+
+      if(xhr.status >= 200 && xhr.status < 300){
+        const blob = xhr.response;
+        const url = URL.createObjectURL(blob);
+
+        const origBytes = parseInt(xhr.getResponseHeader("X-Original-Bytes") || "0", 10);
+        const outBytes  = parseInt(xhr.getResponseHeader("X-Output-Bytes") || "0", 10);
+
+        if(origBytes > 0 && outBytes > 0){
+          origSizeEl.textContent = pretty(origBytes);
+          outSizeEl.textContent = pretty(outBytes);
+          const saved = Math.max(0, Math.round((1 - (outBytes / origBytes)) * 100));
+          savedPctEl.textContent = saved + "%";
+          resultBox.classList.remove("hidden");
+        }
+
+        const disp = xhr.getResponseHeader("Content-Disposition");
+        const fname = getFilenameFromDisposition(disp) || (selected.name.replace(/\.pdf$/i,"") + "-compressed.pdf");
+
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = fname;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        statusEl.textContent = "Done ✅";
+        showMsg("Compression completed. Download started.", true);
+
+      } else {
+        const err = await readErrorBlob(xhr.response);
+        showMsg("Compression failed: " + err, false);
+      }
+
+      compressBtn.disabled = false;
+      resetBtn.disabled = false;
+      compressBtn.textContent = "Compress";
+    };
+
+    xhr.send(fd);
+  });
+
+  // init
+  setToggle(false);
+  setFile(null);
+  setEnabled(false);
+  updateEstimate();
+});
+</script>
+
+</body>
+</html>
