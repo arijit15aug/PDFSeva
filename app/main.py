@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import List, Optional, Tuple
 import ssl
 import certifi
+import httpx
 
 import fitz  # PyMuPDF
 from PIL import Image
@@ -84,50 +85,41 @@ SMTP_USER = os.environ.get("SMTP_USER", "")
 SMTP_PASS = os.environ.get("SMTP_PASS", "")
 SMTP_FROM = os.environ.get("SMTP_FROM", SMTP_USER or "no-reply@example.com")
 
+BREVO_API_KEY = os.environ.get("BREVO_API_KEY", "")
 
 async def send_email(to_email: str, subject: str, html: str, text: Optional[str] = None) -> None:
-    if not (SMTP_HOST and SMTP_PORT and SMTP_USER and SMTP_PASS and SMTP_FROM):
-        raise RuntimeError("SMTP not configured. Set SMTP_HOST/PORT/USER/PASS/FROM.")
-
-    msg = EmailMessage()
-    msg["From"] = SMTP_FROM
-    msg["To"] = to_email
-    msg["Subject"] = subject
+    if not BREVO_API_KEY:
+        raise RuntimeError("BREVO_API_KEY not set")
 
     if text is None:
         text = "Open this email in an HTML-capable client to view the message."
 
-    msg.set_content(text)
-    msg.add_alternative(html, subtype="html")
+    # Parse "Name <email>" from SMTP_FROM
+    from_name = "PDF Tools"
+    from_email = SMTP_FROM
+    if "<" in SMTP_FROM and ">" in SMTP_FROM:
+        from_name = SMTP_FROM.split("<", 1)[0].strip()
+        from_email = SMTP_FROM.split("<", 1)[1].split(">", 1)[0].strip()
 
-    tls_context = ssl.create_default_context(cafile=certifi.where())
+    payload = {
+        "sender": {"name": from_name, "email": from_email},
+        "to": [{"email": to_email}],
+        "subject": subject,
+        "htmlContent": html,
+        "textContent": text,
+    }
 
-async def send_email(to_email: str, subject: str, html: str, text: Optional[str] = None):
+    headers = {
+        "api-key": BREVO_API_KEY,
+        "content-type": "application/json",
+        "accept": "application/json",
+    }
 
-    msg = EmailMessage()
-    msg["From"] = SMTP_FROM
-    msg["To"] = to_email
-    msg["Subject"] = subject
+    async with httpx.AsyncClient(timeout=30) as client:
+        r = await client.post("https://api.brevo.com/v3/smtp/email", json=payload, headers=headers)
 
-    if text is None:
-        text = "Open this email in an HTML-capable client."
-
-    msg.set_content(text)
-    msg.add_alternative(html, subtype="html")
-
-    tls_context = ssl.create_default_context(cafile=certifi.where())
-
-    await aiosmtplib.send(
-        msg,
-        hostname=SMTP_HOST,
-        port=SMTP_PORT,
-        start_tls=True,     # ✅ for Brevo 587
-        username=SMTP_USER,
-        password=SMTP_PASS,
-        tls_context=tls_context,
-        timeout=60,
-    )
-
+    if r.status_code >= 400:
+        raise RuntimeError(f"Brevo API error {r.status_code}: {r.text}")
 
 
 # ----------------------------
