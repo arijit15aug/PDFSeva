@@ -102,16 +102,19 @@ async def send_email(to_email: str, subject: str, html: str, text: Optional[str]
 
     tls_context = ssl.create_default_context(cafile=certifi.where())
 
+    mode = os.environ.get("SMTP_MODE", "starttls").lower()
+
     await aiosmtplib.send(
-        msg,
-        hostname=SMTP_HOST,
-        port=SMTP_PORT,
-        use_tls=True,
-        username=SMTP_USER,
-        password=SMTP_PASS,
-        tls_context=tls_context,
-        timeout=20,
-    )
+    msg,
+    hostname=SMTP_HOST,
+    port=SMTP_PORT,
+    start_tls=(mode == "starttls"),   # ✅ 587
+    use_tls=(mode == "tls"),          # ✅ 465
+    username=SMTP_USER,
+    password=SMTP_PASS,
+    tls_context=tls_context,
+    timeout=30,
+)
 
 
 # ----------------------------
