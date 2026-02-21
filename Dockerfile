@@ -19,4 +19,4 @@ ENV PYTHONUNBUFFERED=1
 ENV PORT=8000
 
 # Railway provides PORT env var automatically
-CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT}"]
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT} --proxy-headers --forwarded-allow-ips='*'"]
