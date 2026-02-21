@@ -10,3 +10,4 @@ PyPDF2==3.0.1
 
 aiosmtplib==3.0.2
 certifi==2024.12.14
+python-multipart==0.0.9
