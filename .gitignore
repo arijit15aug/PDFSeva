@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+
+# macOS
+.DS_Store
+
+# App runtime folders
+uploads/
+outputs/
+data/users.db
+data/*.db
+
+# VSCode
+.vscode/
