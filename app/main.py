@@ -171,6 +171,9 @@ def init_db():
 def on_startup():
     init_db()
 
+    print("BREVO_API_KEY present?", bool(os.getenv("BREVO_API_KEY")))
+    print("BREVO_API_KEY prefix:", (os.getenv("BREVO_API_KEY") or "")[:6])
+
 
 # ----------------------------
 # Auth helpers

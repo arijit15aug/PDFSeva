@@ -112,9 +112,3 @@
 </script>
 </body>
 </html>
-
-# optional: invalidate older tokens for this user
-conn = db()
-conn.execute("UPDATE password_resets SET used=1 WHERE user_id=? AND used=0", (row["id"],))
-conn.commit()
-conn.close()
