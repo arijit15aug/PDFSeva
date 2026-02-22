@@ -5,6 +5,10 @@ import shutil
 import subprocess
 import zipfile
 import sqlite3
+import secrets
+import hmac
+import hashlib
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import List, Optional, Tuple
 import ssl
@@ -20,10 +24,7 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, HTML
 from fastapi.staticfiles import StaticFiles
 
 from passlib.context import CryptContext
-from itsdangerous import URLSafeSerializer, URLSafeTimedSerializer, BadSignature, SignatureExpired
-
-import aiosmtplib
-from email.message import EmailMessage
+from itsdangerous import URLSafeSerializer, BadSignature
 
 
 # ----------------------------
@@ -67,9 +68,9 @@ SECRET_KEY = os.environ.get("APP_SECRET_KEY", "dev-secret-change-me")
 COOKIE_NAME = "session"  # matches your frontend logic
 
 session_serializer = URLSafeSerializer(SECRET_KEY, salt="pdf-tools-session")
-reset_serializer = URLSafeTimedSerializer(SECRET_KEY, salt="pdf-tools-reset")
 
-RESET_TOKEN_MAX_AGE_SECONDS = 30 * 60  # 30 minutes
+# Reset token config (DB-based + single use)
+RESET_TOKEN_TTL_MINUTES = int(os.environ.get("RESET_TOKEN_TTL_MINUTES", "30"))
 
 # ✅ cookie secure flag (Railway is HTTPS)
 COOKIE_SECURE = os.environ.get("COOKIE_SECURE", "false").lower() in ("1", "true", "yes")
@@ -77,7 +78,7 @@ COOKIE_SECURE = os.environ.get("COOKIE_SECURE", "false").lower() in ("1", "true"
 
 
 # ----------------------------
-# SMTP (Gmail)
+# Email (Brevo API)
 # ----------------------------
 SMTP_HOST = os.environ.get("SMTP_HOST", "")
 SMTP_PORT = int(os.environ.get("SMTP_PORT", "587"))
@@ -86,6 +87,7 @@ SMTP_PASS = os.environ.get("SMTP_PASS", "")
 SMTP_FROM = os.environ.get("SMTP_FROM", SMTP_USER or "no-reply@example.com")
 
 BREVO_API_KEY = os.environ.get("BREVO_API_KEY", "")
+
 
 async def send_email(to_email: str, subject: str, html: str, text: Optional[str] = None) -> None:
     if not BREVO_API_KEY:
@@ -143,6 +145,24 @@ def init_db():
         );
         """
     )
+
+    # ✅ Single-use password reset tokens (hashed)
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS password_resets(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            token_hash TEXT NOT NULL,
+            expires_at TEXT NOT NULL,
+            used INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(user_id) REFERENCES users(id)
+        );
+        """
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_password_resets_token_hash ON password_resets(token_hash);")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_password_resets_user_id ON password_resets(user_id);")
+
     conn.commit()
     conn.close()
 
@@ -190,16 +210,77 @@ def get_current_user_email(request: Request) -> Optional[str]:
     return read_session(token)
 
 
-def create_reset_token(email: str) -> str:
-    return reset_serializer.dumps({"email": email})
+# ----------------------------
+# Password reset helpers (DB-based, single-use)
+# ----------------------------
+def _hash_reset_token(token: str) -> str:
+    # HMAC so attackers can't precompute hash tables if DB leaks
+    key = SECRET_KEY.encode("utf-8")
+    return hmac.new(key, token.encode("utf-8"), hashlib.sha256).hexdigest()
 
 
-def read_reset_token(token: str, max_age_seconds: int = RESET_TOKEN_MAX_AGE_SECONDS) -> Optional[str]:
+def create_password_reset_token(user_id: int) -> str:
+    raw = secrets.token_urlsafe(32)
+    token_hash = _hash_reset_token(raw)
+    expires_at = (datetime.utcnow() + timedelta(minutes=RESET_TOKEN_TTL_MINUTES)).isoformat()
+
+    conn = db()
     try:
-        data = reset_serializer.loads(token, max_age=max_age_seconds)
-        return data.get("email")
-    except (BadSignature, SignatureExpired):
+        conn.execute(
+            "INSERT INTO password_resets(user_id, token_hash, expires_at, used) VALUES (?, ?, ?, 0)",
+            (user_id, token_hash, expires_at),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    return raw
+
+
+def verify_password_reset_token(raw: str) -> Optional[sqlite3.Row]:
+    if not raw or len(raw) < 10:
         return None
+
+    token_hash = _hash_reset_token(raw)
+    conn = db()
+    try:
+        row = conn.execute(
+            """
+            SELECT pr.id as reset_id, pr.user_id, pr.expires_at, pr.used, u.email
+            FROM password_resets pr
+            JOIN users u ON u.id = pr.user_id
+            WHERE pr.token_hash = ?
+            ORDER BY pr.id DESC
+            LIMIT 1
+            """,
+            (token_hash,),
+        ).fetchone()
+
+        if not row:
+            return None
+        if int(row["used"]) == 1:
+            return None
+
+        try:
+            exp = datetime.fromisoformat(row["expires_at"])
+        except Exception:
+            return None
+
+        if datetime.utcnow() > exp:
+            return None
+
+        return row
+    finally:
+        conn.close()
+
+
+def mark_reset_token_used(reset_id: int) -> None:
+    conn = db()
+    try:
+        conn.execute("UPDATE password_resets SET used=1 WHERE id=?", (reset_id,))
+        conn.commit()
+    finally:
+        conn.close()
 
 
 # ----------------------------
@@ -402,11 +483,11 @@ async def forgot_password(email: str = Form(...), request: Request = None):
     email = (email or "").strip().lower()
 
     conn = db()
-    row = conn.execute("SELECT email FROM users WHERE email=?", (email,)).fetchone()
+    row = conn.execute("SELECT id, email FROM users WHERE email=?", (email,)).fetchone()
     conn.close()
 
     if row:
-        token = create_reset_token(email)
+        token = create_password_reset_token(row["id"])
         base = str(request.base_url).rstrip("/") if request else ""
         reset_link = f"{base}/auth/reset?token={token}" if base else f"/auth/reset?token={token}"
 
@@ -420,11 +501,11 @@ async def forgot_password(email: str = Form(...), request: Request = None):
               Reset Password
             </a>
           </p>
-          <p style="color:#6b7280;font-size:12px">This link expires in 30 minutes.</p>
+          <p style="color:#6b7280;font-size:12px">This link expires in {RESET_TOKEN_TTL_MINUTES} minutes.</p>
           <p style="color:#6b7280;font-size:12px">If you didn't request this, you can ignore this email.</p>
         </div>
         """
-        text = f"Reset your password (expires in 30 minutes): {reset_link}"
+        text = f"Reset your password (expires in {RESET_TOKEN_TTL_MINUTES} minutes): {reset_link}"
 
         try:
             await send_email(email, subject, html, text=text)
@@ -438,22 +519,22 @@ async def forgot_password(email: str = Form(...), request: Request = None):
 def reset_password(token: str = Form(...), password: str = Form(...)):
     validate_password(password)
 
-    email = read_reset_token(token, max_age_seconds=RESET_TOKEN_MAX_AGE_SECONDS)
-    if not email:
+    reset_row = verify_password_reset_token(token)
+    if not reset_row:
         raise HTTPException(400, "Reset link is invalid or expired")
 
+    # Update password + mark token used (single-use)
     conn = db()
-    row = conn.execute("SELECT email FROM users WHERE email=?", (email,)).fetchone()
-    if not row:
+    try:
+        conn.execute(
+            "UPDATE users SET password_hash=? WHERE id=?",
+            (hash_password(password), reset_row["user_id"]),
+        )
+        conn.commit()
+    finally:
         conn.close()
-        raise HTTPException(400, "Reset link is invalid or expired")
 
-    conn.execute(
-        "UPDATE users SET password_hash=? WHERE email=?",
-        (hash_password(password), email),
-    )
-    conn.commit()
-    conn.close()
+    mark_reset_token_used(reset_row["reset_id"])
 
     return JSONResponse({"ok": True, "message": "Password updated. You can sign in now."})
 
@@ -691,9 +772,6 @@ async def jpg_to_pdf(files: List[UploadFile] = File(...)):
 
         dst = job_dir / f"{i:03d}{ext}"
 
-        # enforce TOTAL limit across multiple files
-        # (we stream each file and keep total_written under MAX_UPLOAD_BYTES)
-        # Save file with per-file max remaining budget
         remaining = max(0, MAX_UPLOAD_BYTES - total_written)
         if remaining <= 0:
             _http_413(f"Total upload too large. Max allowed is {MAX_UPLOAD_MB}MB.")

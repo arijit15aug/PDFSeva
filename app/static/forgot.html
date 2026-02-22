@@ -62,6 +62,23 @@
   };
   const hide = () => m.classList.add("hidden");
 
+  const extractFastApiError = async (r) => {
+    try{
+      const j = await r.json();
+      const d = j.detail;
+
+      if (typeof d === "string") return d;
+      if (Array.isArray(d) && d.length > 0) {
+        if (d[0]?.msg) return d[0].msg;
+      }
+      return j.message || "Failed to send reset email";
+    }catch(_){
+      return "Failed to send reset email";
+    }
+  };
+
+  const sleep = (ms) => new Promise(res => setTimeout(res, ms));
+
   f.addEventListener("submit", async (e) => {
     e.preventDefault();
     hide();
@@ -73,14 +90,17 @@
       const r = await fetch("/auth/forgot", { method:"POST", body: fd, credentials: "include" });
 
       if(!r.ok){
-        let msg = "Failed to send reset email";
-        try{ const j = await r.json(); msg = j.detail || msg; }catch(_){}
+        const msg = await extractFastApiError(r);
         show(msg, false);
         return;
       }
 
       const data = await r.json();
       show(data.message || "If this email exists, a reset link has been sent.", true);
+
+      // small UX: prevent spam clicks (also reduces DB rows)
+      b.textContent = "Sent ✅";
+      await sleep(1500);
     }catch(err){
       show("Network error", false);
     }finally{
@@ -92,3 +112,9 @@
 </script>
 </body>
 </html>
+
+# optional: invalidate older tokens for this user
+conn = db()
+conn.execute("UPDATE password_resets SET used=1 WHERE user_id=? AND used=0", (row["id"],))
+conn.commit()
+conn.close()

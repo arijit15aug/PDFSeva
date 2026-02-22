@@ -67,11 +67,36 @@
     m.classList.remove("hidden");
   };
 
+  const disableForm = () => {
+    // disable all inputs + button
+    [...f.querySelectorAll("input,button")].forEach(el => el.disabled = true);
+    b.textContent = "Invalid link";
+    b.classList.add("opacity-60");
+  };
+
   if(!token){
     show("Reset token missing. Please use the link from your email.", false);
+    disableForm();
   }else{
     tokenInput.value = token;
   }
+
+  const extractFastApiError = async (r) => {
+    try{
+      const j = await r.json();
+      const d = j.detail;
+
+      // detail can be string or array of validation errors
+      if (typeof d === "string") return d;
+      if (Array.isArray(d) && d.length > 0) {
+        // try common fastapi validation format: [{msg: "..."}]
+        if (d[0]?.msg) return d[0].msg;
+      }
+      return j.message || "Reset failed";
+    }catch(_){
+      return "Reset failed";
+    }
+  };
 
   f.addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -83,8 +108,7 @@
       const r = await fetch("/auth/reset", { method:"POST", body: fd });
 
       if(!r.ok){
-        let msg = "Reset failed";
-        try{ const j = await r.json(); msg = j.detail || msg; }catch(_){}
+        const msg = await extractFastApiError(r);
         show(msg, false);
         return;
       }
